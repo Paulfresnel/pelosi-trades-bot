@@ -1,14 +1,14 @@
 import os
 import requests
 from bs4 import BeautifulSoup
-from telegram.ext import Updater, CommandHandler
+from telegram.ext import ApplicationBuilder, CommandHandler
 import time
 
 # Replace 'YOUR_BOT_TOKEN' with the actual token you get from BotFather
 TOKEN = '7207269548:AAFgfArYdtO4tZl1U7jHoFQMFf3tEds-Rp0'
 
-def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="I'm a bot that tracks Nancy Pelosi's stock trades!")
+async def start(update, context):
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="I'm a bot that tracks Nancy Pelosi's stock trades!")
 
 def check_trades():
     # URL of the page with Nancy Pelosi's trades
@@ -34,22 +34,24 @@ def check_trades():
     
     return trades
 
-def send_updates(context):
+async def send_updates(context):
     trades = check_trades()
     for trade in trades:
-        context.bot.send_message(chat_id='5619051853', text=f"New trade:\n\n{trade}")
+        await context.bot.send_message(chat_id='5619051853', text=f"New trade:\n\n{trade}")
 
 def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    application = ApplicationBuilder().token(TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("start", start))
 
-    # Check for updates every hour
-    updater.job_queue.run_repeating(send_updates, interval=3600, first=0)
+    # Check if job queue is available
+    if application.job_queue:
+        # Check for updates every hour
+        application.job_queue.run_repeating(send_updates, interval=3600, first=0)
+    else:
+        print("Warning: JobQueue is not available. Scheduled updates will not run.")
 
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
