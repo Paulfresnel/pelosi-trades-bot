@@ -1,55 +1,94 @@
 import os
 import requests
 from bs4 import BeautifulSoup
-from telegram.ext import ApplicationBuilder, CommandHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+import json
 import time
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+import aiohttp
+import asyncio
 
 # Replace 'YOUR_BOT_TOKEN' with the actual token you get from BotFather
 TOKEN = '7207269548:AAFgfArYdtO4tZl1U7jHoFQMFf3tEds-Rp0'
 
-async def start(update, context):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="I'm a bot that tracks Nancy Pelosi's stock trades!")
+async def check_trades():
+    url = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json'
+    
+    print(f"Fetching data from {url}")
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            print(f"Response status code: {response.status}")
+            if response.status == 200:
+                try:
+                    data = await response.json()
+                    print(f"Total trades fetched: {len(data)}")
+                    
+                    pelosi_trades = [trade for trade in data if trade.get('representative') == 'Nancy Pelosi']
+                    print(f"Pelosi trades found: {len(pelosi_trades)}")
+                    
+                    if pelosi_trades:
+                        latest_trade = pelosi_trades[0]
+                        trade_info = f"Date: {latest_trade.get('transaction_date', 'N/A')}\n" \
+                                     f"Ticker: {latest_trade.get('ticker', 'N/A')}\n" \
+                                     f"Type: {latest_trade.get('type', 'N/A')}\n" \
+                                     f"Amount: {latest_trade.get('amount', 'N/A')}\n" \
+                                     f"Description: {latest_trade.get('asset_description', 'N/A')}"
+                        print(f"Trade found: {trade_info}")
+                        return trade_info
+                    else:
+                        print("No trades found for Nancy Pelosi")
+                        # Debug: Print a few random representatives to check the data
+                        random_reps = set(trade.get('representative', 'N/A') for trade in data[:100])
+                        print(f"Sample representatives: {list(random_reps)[:10]}")
+                        return None
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding JSON: {e}")
+                    print(f"Response content: {await response.text()}")
+                    return None
+            else:
+                print(f"Failed to fetch data: HTTP {response.status}")
+                return None
 
-def check_trades():
-    # URL of the page with Nancy Pelosi's trades
-    url = 'https://www.quiverquant.com/congresstrading/politician/Nancy%20Pelosi-P000197'
-    
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    trades = []
-    trade_rows = soup.select('#tradeTable tbody tr')
-    
-    for row in trade_rows:
-        cells = row.find_all('td')
-        if len(cells) >= 6:
-            ticker = cells[0].find('strong').text.strip()
-            transaction = cells[1].find('strong').text.strip()
-            amount = cells[1].find('span').text.strip()
-            date = cells[3].find('strong').text.strip()
-            description = cells[4].find('span').text.strip()
-            
-            trade_info = f"Ticker: {ticker}\nTransaction: {transaction}\nAmount: {amount}\nDate: {date}\nDescription: {description}"
-            trades.append(trade_info)
-    
-    return trades
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Latest Trade", callback_data='latest_trade')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "I'm a bot that tracks Nancy Pelosi's stock trades! What would you like to do?",
+        reply_markup=reply_markup
+    )
 
-async def send_updates(context):
-    trades = check_trades()
-    for trade in trades:
-        await context.bot.send_message(chat_id='5619051853', text=f"New trade:\n\n{trade}")
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == 'latest_trade':
+        loading_message = await query.edit_message_text(text="🚀 Fetching the latest trade... Please wait.")
+        try:
+            trade = await check_trades()
+            if trade:
+                message = f"Here is the latest trade:\n\n{trade}"
+            else:
+                message = "No recent trades found or there was an issue fetching the data. Please try again later."
+        except Exception as e:
+            print(f"Error in button handler: {e}")
+            message = "An error occurred while fetching the data. Please try again later."
+        await loading_message.edit_text(text=message)
 
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
-
-    # Check if job queue is available
-    if application.job_queue:
-        # Check for updates every hour
-        application.job_queue.run_repeating(send_updates, interval=3600, first=0)
-    else:
-        print("Warning: JobQueue is not available. Scheduled updates will not run.")
+    application.add_handler(CallbackQueryHandler(button))
 
     application.run_polling()
 
