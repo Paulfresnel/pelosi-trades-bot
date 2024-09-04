@@ -31,23 +31,32 @@ async def check_trades():
                     data = await response.json()
                     print(f"Total trades fetched: {len(data)}")
                     
-                    pelosi_trades = [trade for trade in data if trade.get('representative') == 'Nancy Pelosi']
+                    pelosi_trades = [trade for trade in data if 'pelosi' in trade.get('representative', '').lower()]
                     print(f"Pelosi trades found: {len(pelosi_trades)}")
                     
                     if pelosi_trades:
                         latest_trade = pelosi_trades[0]
-                        trade_info = f"Date: {latest_trade.get('transaction_date', 'N/A')}\n" \
-                                     f"Ticker: {latest_trade.get('ticker', 'N/A')}\n" \
-                                     f"Type: {latest_trade.get('type', 'N/A')}\n" \
-                                     f"Amount: {latest_trade.get('amount', 'N/A')}\n" \
-                                     f"Description: {latest_trade.get('asset_description', 'N/A')}"
+                        
+                        # Extract total loss if present in the description
+                        description = latest_trade.get('asset_description', 'N/A')
+                        total_loss = ''
+                        if 'Total loss of' in description:
+                            total_loss = description.split('Total loss of')[-1].strip()
+                            description = description.split('Total loss of')[0].strip()
+                        
+                        trade_info = f"📅 Date: {latest_trade.get('transaction_date', 'N/A')}\n" \
+                                     f"🏷️ Ticker: {latest_trade.get('ticker', 'N/A')}\n" \
+                                     f"📊 Type: {latest_trade.get('type', 'N/A')}\n" \
+                                     f"💰 Amount: {latest_trade.get('amount', 'N/A')}\n" \
+                                     f"📝 Description: {description}"
+                        
+                        if total_loss:
+                            trade_info += f"\n💸 Total Loss: {total_loss}"
+                        
                         print(f"Trade found: {trade_info}")
                         return trade_info
                     else:
                         print("No trades found for Nancy Pelosi")
-                        # Debug: Print a few random representatives to check the data
-                        random_reps = set(trade.get('representative', 'N/A') for trade in data[:100])
-                        print(f"Sample representatives: {list(random_reps)[:10]}")
                         return None
                 except json.JSONDecodeError as e:
                     print(f"Error decoding JSON: {e}")
@@ -82,7 +91,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"Error in button handler: {e}")
             message = "An error occurred while fetching the data. Please try again later."
-        await loading_message.edit_text(text=message)
+        await loading_message.edit_text(text=message, parse_mode='HTML')
 
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
