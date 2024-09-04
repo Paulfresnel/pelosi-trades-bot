@@ -44,10 +44,15 @@ async def check_trades():
                             total_loss = description.split('Total loss of')[-1].strip()
                             description = description.split('Total loss of')[0].strip()
                         
+                        # Handle incomplete amount
+                        amount = latest_trade.get('amount', 'N/A')
+                        if amount.endswith('-'):
+                            amount += ' (incomplete data)'
+                        
                         trade_info = f"📅 Date: {latest_trade.get('transaction_date', 'N/A')}\n" \
                                      f"🏷️ Ticker: {latest_trade.get('ticker', 'N/A')}\n" \
                                      f"📊 Type: {latest_trade.get('type', 'N/A')}\n" \
-                                     f"💰 Amount: {latest_trade.get('amount', 'N/A')}\n" \
+                                     f"💰 Amount: {amount}\n" \
                                      f"📝 Description: {description}"
                         
                         if total_loss:
