@@ -18,7 +18,20 @@ import asyncio
 # Replace 'YOUR_BOT_TOKEN' with the actual token you get from BotFather
 TOKEN = '7207269548:AAFgfArYdtO4tZl1U7jHoFQMFf3tEds-Rp0'
 
-async def check_trades():
+def get_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("Latest Trade", callback_data='latest_trade')],
+        [InlineKeyboardButton("Latest 3 Trades", callback_data='latest_3_trades')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "I'm a bot that tracks Nancy Pelosi's stock trades! What would you like to do?",
+        reply_markup=get_keyboard()
+    )
+
+async def get_trades(num_trades=1):
     url = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json'
     
     print(f"Fetching data from {url}")
@@ -34,52 +47,36 @@ async def check_trades():
                     pelosi_trades = [trade for trade in data if 'pelosi' in trade.get('representative', '').lower()]
                     print(f"Pelosi trades found: {len(pelosi_trades)}")
                     
-                    if pelosi_trades:
-                        latest_trade = pelosi_trades[0]
-                        
-                        # Extract total loss if present in the description
-                        description = latest_trade.get('asset_description', 'N/A')
+                    trades_info = []
+                    for trade in pelosi_trades[:num_trades]:
+                        description = trade.get('asset_description', 'N/A')
                         total_loss = ''
                         if 'Total loss of' in description:
                             total_loss = description.split('Total loss of')[-1].strip()
                             description = description.split('Total loss of')[0].strip()
                         
-                        # Handle incomplete amount
-                        amount = latest_trade.get('amount', 'N/A')
+                        amount = trade.get('amount', 'N/A')
                         if amount.endswith('-'):
                             amount += ' (incomplete data)'
                         
-                        trade_info = f"📅 Date: {latest_trade.get('transaction_date', 'N/A')}\n" \
-                                     f"🏷️ Ticker: {latest_trade.get('ticker', 'N/A')}\n" \
-                                     f"📊 Type: {latest_trade.get('type', 'N/A')}\n" \
+                        trade_info = f"📅 Date: {trade.get('transaction_date', 'N/A')}\n" \
+                                     f"🏷️ Ticker: {trade.get('ticker', 'N/A')}\n" \
+                                     f"📊 Type: {trade.get('type', 'N/A')}\n" \
                                      f"💰 Amount: {amount}\n" \
                                      f"📝 Description: {description}"
                         
                         if total_loss:
                             trade_info += f"\n💸 Total Loss: {total_loss}"
                         
-                        print(f"Trade found: {trade_info}")
-                        return trade_info
-                    else:
-                        print("No trades found for Nancy Pelosi")
-                        return None
+                        trades_info.append(trade_info)
+                    
+                    return trades_info
                 except json.JSONDecodeError as e:
                     print(f"Error decoding JSON: {e}")
-                    print(f"Response content: {await response.text()}")
                     return None
             else:
                 print(f"Failed to fetch data: HTTP {response.status}")
                 return None
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("Latest Trade", callback_data='latest_trade')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "I'm a bot that tracks Nancy Pelosi's stock trades! What would you like to do?",
-        reply_markup=reply_markup
-    )
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -87,16 +84,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == 'latest_trade':
         loading_message = await query.edit_message_text(text="🚀 Fetching the latest trade... Please wait.")
-        try:
-            trade = await check_trades()
-            if trade:
-                message = f"Here is the latest trade:\n\n{trade}"
-            else:
-                message = "No recent trades found or there was an issue fetching the data. Please try again later."
-        except Exception as e:
-            print(f"Error in button handler: {e}")
-            message = "An error occurred while fetching the data. Please try again later."
-        await loading_message.edit_text(text=message, parse_mode='HTML')
+        trades = await get_trades(1)
+        if trades:
+            message = f"Here is the latest trade:\n\n{trades[0]}"
+        else:
+            message = "No recent trades found or there was an issue fetching the data. Please try again later."
+    elif query.data == 'latest_3_trades':
+        loading_message = await query.edit_message_text(text="🚀 Fetching the latest 3 trades... Please wait.")
+        trades = await get_trades(3)
+        if trades:
+            message = "Here are the latest 3 trades:\n\n" + "\n\n".join(trades)
+        else:
+            message = "No recent trades found or there was an issue fetching the data. Please try again later."
+    
+    await loading_message.edit_text(text=message, reply_markup=get_keyboard())
 
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
