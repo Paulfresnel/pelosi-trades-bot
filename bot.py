@@ -1,24 +1,18 @@
 import os
 from dotenv import load_dotenv
-import requests
-from bs4 import BeautifulSoup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-import json
-import time
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-import aiohttp
-import asyncio
 from flask import Flask
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+import aiohttp
+import json
 
-# Replace 'YOUR_BOT_TOKEN' with the actual token you get from BotFather
+# Load environment variables
 load_dotenv()
+
+# Initialize Flask app
+app = Flask(__name__)
+
+# Get the token from environment variable
 TOKEN = os.getenv('TOKEN')
 
 def get_keyboard():
@@ -102,6 +96,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await loading_message.edit_text(text=message, reply_markup=get_keyboard())
 
+@app.route('/')
+def home():
+    return "Bot is running!"
+
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
 
@@ -111,5 +109,6 @@ def main():
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
     main()

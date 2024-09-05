@@ -1,5 +1,5 @@
 python-telegram-bot[job-queue]
-   requests
+    requests
    python-dotenv
    beautifulsoup4
    selenium
