@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -16,7 +17,8 @@ import aiohttp
 import asyncio
 
 # Replace 'YOUR_BOT_TOKEN' with the actual token you get from BotFather
-TOKEN = '7207269548:AAFgfArYdtO4tZl1U7jHoFQMFf3tEds-Rp0'
+load_dotenv()
+TOKEN = os.getenv('TOKEN')
 
 def get_keyboard():
     keyboard = [

@@ -1,5 +1,6 @@
 python-telegram-bot[job-queue]
 requests
+python-dotenv
 beautifulsoup4
 selenium
 webdriver_manager
