@@ -1,9 +1,9 @@
-python-telegram-bot[job-queue]
+python-telegram-bot[job-queue]==20.3
     requests
-   python-dotenv
+   python-dotenv==1.0.0
    beautifulsoup4
    selenium
-   aiohttp
+   aiohttp==3.8.4
    webdriver_manager
-   gunicorn
-   Flask
+   gunicorn==20.1.0
+   Flask==2.3.2

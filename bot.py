@@ -6,6 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 import aiohttp
 import json
 import threading
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -102,15 +103,16 @@ def home():
     return "Bot is running!"
 
 def run_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-@app.before_first_request
-def start_bot():
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.start()
+# Start the bot in a separate thread
+bot_thread = threading.Thread(target=run_bot)
+bot_thread.start()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
