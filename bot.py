@@ -110,9 +110,11 @@ def run_bot():
     application.add_handler(CallbackQueryHandler(button))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# Start the bot in a separate thread
-bot_thread = threading.Thread(target=run_bot)
-bot_thread.start()
+# Start the bot in the main thread
+application = ApplicationBuilder().token(TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(button))
+application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
