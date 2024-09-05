@@ -1,6 +1,9 @@
 python-telegram-bot[job-queue]
-requests
-python-dotenv
-beautifulsoup4
-selenium
-webdriver_manager
+   requests
+   python-dotenv
+   beautifulsoup4
+   selenium
+   aiohttp
+   webdriver_manager
+   gunicorn
+   Flask

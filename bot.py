@@ -29,7 +29,7 @@ def get_keyboard():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "I'm a bot that tracks Nancy Pelosi's stock trades! What would you like to do?",
+        "Hi there, I'm a bot that tracks famous politicians' stock trades! What would you like to do?",
         reply_markup=get_keyboard()
     )
 
