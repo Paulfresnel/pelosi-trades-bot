@@ -5,6 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import aiohttp
 import json
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -100,15 +101,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def home():
     return "Bot is running!"
 
-def main():
+def run_bot():
     application = ApplicationBuilder().token(TOKEN).build()
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button))
-
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
+@app.before_first_request
+def start_bot():
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.start()
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
-    main()
