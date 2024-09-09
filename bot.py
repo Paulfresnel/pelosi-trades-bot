@@ -70,15 +70,22 @@ async def fetch_trades_data():
     
     if last_fetch_time is None or (current_time - last_fetch_time) > timedelta(minutes=5):
         url = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json'
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    cached_data = await response.json()
-                    last_fetch_time = current_time
-                    logger.info("Fetched new data from API")
-                else:
-                    logger.error(f"Failed to fetch data: HTTP {response.status}")
-                    return None
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=30) as response:
+                    if response.status == 200:
+                        cached_data = await response.json()
+                        last_fetch_time = current_time
+                        logger.info("Fetched new data from API")
+                    else:
+                        logger.error(f"Failed to fetch data: HTTP {response.status}")
+                        return None
+        except asyncio.TimeoutError:
+            logger.error("Timeout while fetching data from API")
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching data: {e}")
+            return None
     else:
         logger.info("Using cached data")
     
@@ -152,28 +159,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == 'latest_any':
             loading_message = await query.edit_message_text(text="🚀 Fetching the latest trade from any representative... Please wait.")
             trades = await get_trades(representative=None, num_trades=1)
-            if trades:
-                message = f"*Here is the latest trade:*\n\n{trades[0]}"
-            else:
-                message = "No recent trades found or there was an issue fetching the data. Please try again later."
+            logger.info(f"Fetched trades for latest_any: {trades}")
         else:
             representative = query.data.capitalize()
             loading_message = await query.edit_message_text(text=f"🚀 Fetching the latest 3 trades for {representative}... Please wait.")
             trades = await get_trades(representative, 3)
-            if trades:
-                message = f"*Here are the latest 3 trades for {representative}:*\n\n" + "\n\n".join(trades)
-            else:
-                message = f"No recent trades found for {representative} or there was an issue fetching the data. Please try again later."
-    
+            logger.info(f"Fetched trades for {representative}: {trades}")
+
+        if trades:
+            message = "*Here are the latest trades:*\n\n" + "\n\n".join(trades)
+        else:
+            message = "No recent trades found or there was an issue fetching the data. Please try again later."
+
         await loading_message.edit_text(
             text=message,
             reply_markup=get_keyboard(),
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
+        logger.error(f"Error in button handler: {e}", exc_info=True)
         error_message = "An error occurred. Please try again later or contact support."
         await query.edit_message_text(text=error_message, reply_markup=get_keyboard())
-        print(f"Error in button handler: {e}")
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update:", exc_info=context.error)
@@ -198,11 +204,8 @@ async def main() -> None:
     await application.start()
     await application.updater.start_polling(drop_pending_updates=True)
 
-    try:
-        await application.updater.stop()
-        await application.stop()
-    except Exception as e:
-        logger.error(f"Error stopping application: {e}")
+    # Run the bot until the user presses Ctrl-C
+    await application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
     try:
