@@ -7,6 +7,7 @@ import aiohttp
 import json
 import threading
 import asyncio
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -43,7 +44,15 @@ async def get_trades(num_trades=1):
                     data = await response.json()
                     print(f"Total trades fetched: {len(data)}")
                     
-                    pelosi_trades = [trade for trade in data if 'pelosi' in trade.get('representative', '').lower()]
+                    # Filter for Pelosi's trades and sort by date
+                    pelosi_trades = [
+                        trade for trade in data 
+                        if 'pelosi' in trade.get('representative', '').lower()
+                    ]
+                    pelosi_trades.sort(
+                        key=lambda x: datetime.strptime(x['transaction_date'], '%Y-%m-%d'),
+                        reverse=True
+                    )
                     print(f"Pelosi trades found: {len(pelosi_trades)}")
                     
                     trades_info = []
