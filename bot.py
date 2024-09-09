@@ -1,13 +1,14 @@
 import os
 import logging
 import time
+import fcntl
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import aiohttp
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache
 
 # Set up logging
@@ -58,15 +59,30 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
+# Modify the fetch_trades_data function
+last_fetch_time = None
+cached_data = None
+
 @lru_cache(maxsize=32)
 async def fetch_trades_data():
-    url = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json'
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                return await response.json()
-            else:
-                return None
+    global last_fetch_time, cached_data
+    current_time = datetime.now()
+    
+    if last_fetch_time is None or (current_time - last_fetch_time) > timedelta(minutes=5):
+        url = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json'
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    cached_data = await response.json()
+                    last_fetch_time = current_time
+                    logger.info("Fetched new data from API")
+                else:
+                    logger.error(f"Failed to fetch data: HTTP {response.status}")
+                    return None
+    else:
+        logger.info("Using cached data")
+    
+    return cached_data
 
 async def get_trades(representative=None, num_trades=3):
     try:
@@ -160,27 +176,30 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Error in button handler: {e}")
 
 def run_bot():
-    retry_count = 0
-    max_retries = 5
-    while retry_count < max_retries:
-        try:
+    lock_file = '/tmp/telegram_bot.lock'
+    
+    try:
+        with open(lock_file, 'w') as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            
             application = ApplicationBuilder().token(TOKEN).build()
             application.add_handler(CommandHandler("start", start))
             application.add_handler(CommandHandler("help", help_command))
             application.add_handler(CallbackQueryHandler(button))
             logger.info("Starting bot...")
             application.run_polling(allowed_updates=Update.ALL_TYPES)
-        except telegram.error.Conflict as e:
-            logger.error(f"Conflict error: {e}")
-            retry_count += 1
-            wait_time = 2 ** retry_count  # Exponential backoff
-            logger.info(f"Retrying in {wait_time} seconds...")
-            time.sleep(wait_time)
-        except Exception as e:
-            logger.error(f"An error occurred: {e}")
-            break
-    else:
-        logger.error("Max retries reached. Unable to start the bot.")
+    except IOError:
+        logger.error("Another instance is already running")
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+    finally:
+        if 'f' in locals():
+            fcntl.flock(f, fcntl.LOCK_UN)
+            f.close()
+        try:
+            os.remove(lock_file)
+        except OSError:
+            pass
 
 if __name__ == '__main__':
     run_bot()
