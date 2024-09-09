@@ -21,7 +21,7 @@ app = Flask(__name__)
 TOKEN = os.getenv('TOKEN')
 
 # List of main representatives to track
-MAIN_REPRESENTATIVES = ['Pelosi', 'Crenshaw', 'Tuberville']
+MAIN_REPRESENTATIVES = ['Pelosi', 'Green', 'Higgins', 'Graves']
 
 # Conversation states
 CHOOSING_REP, SETTING_ALERT = range(2)
