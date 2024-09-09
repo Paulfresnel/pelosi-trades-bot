@@ -5,9 +5,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import aiohttp
 import json
-import threading
-import asyncio
 from datetime import datetime
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -18,20 +17,22 @@ app = Flask(__name__)
 # Get the token from environment variable
 TOKEN = os.getenv('TOKEN')
 
+# List of main representatives to track
+MAIN_REPRESENTATIVES = ['Pelosi', 'Crenshaw', 'Tuberville']
+
 def get_keyboard():
     keyboard = [
-        [InlineKeyboardButton("Latest Trade", callback_data='latest_trade')],
-        [InlineKeyboardButton("Latest 3 Trades", callback_data='latest_3_trades')]
+        [InlineKeyboardButton(rep, callback_data=rep.lower())] for rep in MAIN_REPRESENTATIVES
     ]
     return InlineKeyboardMarkup(keyboard)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Hi there, I'm a bot that tracks Nancy Pelosi's stock trades! What would you like to do?",
+        "Welcome to the US Representative's Stock Trades bot! Which representative's trades would you like to see?",
         reply_markup=get_keyboard()
     )
 
-async def get_trades(num_trades=1):
+async def get_trades(representative, num_trades=3):
     url = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json'
     
     print(f"Fetching data from {url}")
@@ -44,19 +45,19 @@ async def get_trades(num_trades=1):
                     data = await response.json()
                     print(f"Total trades fetched: {len(data)}")
                     
-                    # Filter for Pelosi's trades and sort by date
-                    pelosi_trades = [
+                    # Filter for the specific representative's trades and sort by date
+                    rep_trades = [
                         trade for trade in data 
-                        if 'pelosi' in trade.get('representative', '').lower()
+                        if representative.lower() in trade.get('representative', '').lower()
                     ]
-                    pelosi_trades.sort(
+                    rep_trades.sort(
                         key=lambda x: datetime.strptime(x['transaction_date'], '%Y-%m-%d'),
                         reverse=True
                     )
-                    print(f"Pelosi trades found: {len(pelosi_trades)}")
+                    print(f"{representative} trades found: {len(rep_trades)}")
                     
                     trades_info = []
-                    for trade in pelosi_trades[:num_trades]:
+                    for trade in rep_trades[:num_trades]:
                         description = trade.get('asset_description', 'N/A')
                         total_loss = ''
                         if 'Total loss of' in description:
@@ -90,26 +91,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == 'latest_trade':
-        loading_message = await query.edit_message_text(text="🚀 Fetching the latest trade... Please wait.")
-        trades = await get_trades(1)
-        if trades:
-            message = f"Here is the latest trade:\n\n{trades[0]}"
-        else:
-            message = "No recent trades found or there was an issue fetching the data. Please try again later."
-    elif query.data == 'latest_3_trades':
-        loading_message = await query.edit_message_text(text="🚀 Fetching the latest 3 trades... Please wait.")
-        trades = await get_trades(3)
-        if trades:
-            message = "Here are the latest 3 trades:\n\n" + "\n\n".join(trades)
-        else:
-            message = "No recent trades found or there was an issue fetching the data. Please try again later."
+    representative = query.data.capitalize()
+    loading_message = await query.edit_message_text(text=f"🚀 Fetching the latest 3 trades for {representative}... Please wait.")
+    trades = await get_trades(representative, 3)
+    if trades:
+        message = f"Here are the latest 3 trades for {representative}:\n\n" + "\n\n".join(trades)
+    else:
+        message = f"No recent trades found for {representative} or there was an issue fetching the data. Please try again later."
     
     await loading_message.edit_text(text=message, reply_markup=get_keyboard())
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "US Representative's Stock Trades bot is running!"
 
 def run_flask():
     port = int(os.environ.get('PORT', 10000))
