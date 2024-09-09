@@ -1,4 +1,6 @@
 import os
+import logging
+import time
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -7,6 +9,10 @@ import aiohttp
 import json
 from datetime import datetime
 from functools import lru_cache
+
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -154,11 +160,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Error in button handler: {e}")
 
 def run_bot():
-    application = ApplicationBuilder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CallbackQueryHandler(button))
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    retry_count = 0
+    max_retries = 5
+    while retry_count < max_retries:
+        try:
+            application = ApplicationBuilder().token(TOKEN).build()
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(CommandHandler("help", help_command))
+            application.add_handler(CallbackQueryHandler(button))
+            logger.info("Starting bot...")
+            application.run_polling(allowed_updates=Update.ALL_TYPES)
+        except telegram.error.Conflict as e:
+            logger.error(f"Conflict error: {e}")
+            retry_count += 1
+            wait_time = 2 ** retry_count  # Exponential backoff
+            logger.info(f"Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        except Exception as e:
+            logger.error(f"An error occurred: {e}")
+            break
+    else:
+        logger.error("Max retries reached. Unable to start the bot.")
 
 if __name__ == '__main__':
     run_bot()
