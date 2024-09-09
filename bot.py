@@ -1,15 +1,15 @@
 import os
 import logging
-import time
-import fcntl
-from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+import asyncio
 import aiohttp
 import json
 from datetime import datetime, timedelta
 from functools import lru_cache
+from dotenv import load_dotenv
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.error import NetworkError, Conflict
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -175,31 +175,37 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text=error_message, reply_markup=get_keyboard())
         print(f"Error in button handler: {e}")
 
-def run_bot():
-    lock_file = '/tmp/telegram_bot.lock'
-    
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    if isinstance(context.error, Conflict):
+        # If we get a conflict error, wait for a bit and then exit
+        await asyncio.sleep(30)
+        os._exit(1)
+
+async def main() -> None:
+    application = Application.builder().token(TOKEN).build()
+
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CallbackQueryHandler(button))
+
+    # Add error handler
+    application.add_error_handler(error_handler)
+
+    # Start the bot
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(drop_pending_updates=True)
+
     try:
-        with open(lock_file, 'w') as f:
-            try:
-                os.chmod(lock_file, 0o777)
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except IOError:
-                logger.error("Another instance is already running")
-                return
-            
-            application = ApplicationBuilder().token(TOKEN).build()
-            application.add_handler(CommandHandler("start", start))
-            application.add_handler(CommandHandler("help", help_command))
-            application.add_handler(CallbackQueryHandler(button))
-            logger.info("Starting bot...")
-            application.run_polling(allowed_updates=Update.ALL_TYPES)
+        await application.updater.stop()
+        await application.stop()
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
-    finally:
-        try:
-            os.remove(lock_file)
-        except OSError:
-            pass
+        logger.error(f"Error stopping application: {e}")
 
 if __name__ == '__main__':
-    run_bot()
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped!")

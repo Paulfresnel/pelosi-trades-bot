@@ -1,1 +1,1 @@
-worker: python bot.py
+worker: while true; do python bot.py; sleep 10; done
