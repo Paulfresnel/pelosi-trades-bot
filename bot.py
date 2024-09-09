@@ -2,12 +2,10 @@ import os
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import aiohttp
 import json
 from datetime import datetime
-import threading
-import asyncio
 from functools import lru_cache
 
 # Load environment variables
@@ -19,19 +17,11 @@ TOKEN = os.getenv('TOKEN')
 # List of main representatives to track
 MAIN_REPRESENTATIVES = ['Pelosi', 'Green', 'Higgins', 'Graves']
 
-# Conversation states
-CHOOSING_REP, SETTING_ALERT = range(2)
-
-# User alerts dictionary
-user_alerts = {}
-
 def get_keyboard():
     keyboard = [
         [InlineKeyboardButton("📊 Latest Trade (Any Representative)", callback_data='latest_any')]
     ] + [
         [InlineKeyboardButton(f"🔍 {rep}'s Trades", callback_data=rep.lower())] for rep in MAIN_REPRESENTATIVES
-    ] + [
-        [InlineKeyboardButton("🔔 Set Alert", callback_data='set_alert')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -43,7 +33,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Features:*\n"
         "• View the latest trade from any representative\n"
         "• Check recent trades of specific politicians\n"
-        "• Set alerts for specific representatives\n"
         "• Get detailed information on each trade\n\n"
         "To get started, simply choose an option below or type /help for more information."
     )
@@ -59,8 +48,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Here's how to use the bot:\n\n"
         "• Click on 'Latest Trade' to see the most recent trade from any representative\n"
         "• Select a specific representative to view their latest 3 trades\n"
-        "• Use 'Set Alert' to receive notifications about new trades\n"
-        "• Type /cancel at any time to stop the current operation\n\n"
         "For any issues or suggestions, please contact @YourUsername"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
@@ -166,23 +153,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text=error_message, reply_markup=get_keyboard())
         print(f"Error in button handler: {e}")
 
-    return ConversationHandler.END
-
 def run_bot():
     application = ApplicationBuilder().token(TOKEN).build()
-    
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(button)],
-        states={
-            CHOOSING_REP: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_alert)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-    )
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(conv_handler)
-    
+    application.add_handler(CallbackQueryHandler(button))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
