@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
@@ -13,9 +12,6 @@ from functools import lru_cache
 
 # Load environment variables
 load_dotenv()
-
-# Initialize Flask app
-app = Flask(__name__)
 
 # Get the token from environment variable
 TOKEN = os.getenv('TOKEN')
@@ -83,6 +79,7 @@ async def get_trades(representative=None, num_trades=3):
     try:
         data = await fetch_trades_data()
         if data is None:
+            print("Failed to fetch trade data")
             return None
 
         if representative:
@@ -134,58 +131,59 @@ async def get_trades(representative=None, num_trades=3):
             trades_info.append(trade_info)
 
         return trades_info
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON: {e}")
-        return None
-    else:
-        print(f"Failed to fetch data: HTTP {response.status}")
+    except Exception as e:
+        print(f"Error in get_trades: {e}")
         return None
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == 'latest_any':
-        loading_message = await query.edit_message_text(text="🚀 Fetching the latest trade from any representative... Please wait.")
-        trades = await get_trades(representative=None, num_trades=1)
-        if trades:
-            message = f"*Here is the latest trade:*\n\n{trades[0]}"
+    try:
+        if query.data == 'latest_any':
+            loading_message = await query.edit_message_text(text="🚀 Fetching the latest trade from any representative... Please wait.")
+            trades = await get_trades(representative=None, num_trades=1)
+            if trades:
+                message = f"*Here is the latest trade:*\n\n{trades[0]}"
+            else:
+                message = "No recent trades found or there was an issue fetching the data. Please try again later."
         else:
-            message = "No recent trades found or there was an issue fetching the data. Please try again later."
-    else:
-        representative = query.data.capitalize()
-        loading_message = await query.edit_message_text(text=f"🚀 Fetching the latest 3 trades for {representative}... Please wait.")
-        trades = await get_trades(representative, 3)
-        if trades:
-            message = f"*Here are the latest 3 trades for {representative}:*\n\n" + "\n\n".join(trades)
-        else:
-            message = f"No recent trades found for {representative} or there was an issue fetching the data. Please try again later."
+            representative = query.data.capitalize()
+            loading_message = await query.edit_message_text(text=f"🚀 Fetching the latest 3 trades for {representative}... Please wait.")
+            trades = await get_trades(representative, 3)
+            if trades:
+                message = f"*Here are the latest 3 trades for {representative}:*\n\n" + "\n\n".join(trades)
+            else:
+                message = f"No recent trades found for {representative} or there was an issue fetching the data. Please try again later."
     
-    await loading_message.edit_text(
-        text=message,
-        reply_markup=get_keyboard(),
-        parse_mode=ParseMode.MARKDOWN
-    )
+        await loading_message.edit_text(
+            text=message,
+            reply_markup=get_keyboard(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        error_message = "An error occurred. Please try again later or contact support."
+        await query.edit_message_text(text=error_message, reply_markup=get_keyboard())
+        print(f"Error in button handler: {e}")
 
-@app.route('/')
-def home():
-    return "US Representative's Stock Trades bot is running!"
-
-def run_flask():
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    return ConversationHandler.END
 
 def run_bot():
     application = ApplicationBuilder().token(TOKEN).build()
+    
+    conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(button)],
+        states={
+            CHOOSING_REP: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_alert)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CallbackQueryHandler(button))
+    application.add_handler(conv_handler)
+    
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    # Start Flask app in a separate thread
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-
-    # Run the bot in the main thread
     run_bot()
