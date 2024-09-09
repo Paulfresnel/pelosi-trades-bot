@@ -180,7 +180,12 @@ def run_bot():
     
     try:
         with open(lock_file, 'w') as f:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                os.chmod(lock_file, 0o777)
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except IOError:
+                logger.error("Another instance is already running")
+                return
             
             application = ApplicationBuilder().token(TOKEN).build()
             application.add_handler(CommandHandler("start", start))
@@ -188,14 +193,9 @@ def run_bot():
             application.add_handler(CallbackQueryHandler(button))
             logger.info("Starting bot...")
             application.run_polling(allowed_updates=Update.ALL_TYPES)
-    except IOError:
-        logger.error("Another instance is already running")
     except Exception as e:
         logger.error(f"An error occurred: {e}")
     finally:
-        if 'f' in locals():
-            fcntl.flock(f, fcntl.LOCK_UN)
-            f.close()
         try:
             os.remove(lock_file)
         except OSError:
