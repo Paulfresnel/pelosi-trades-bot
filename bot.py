@@ -102,20 +102,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def home():
     return "Bot is running!"
 
+def run_flask():
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
+
 def run_bot():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# Start the bot in the main thread
-application = ApplicationBuilder().token(TOKEN).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CallbackQueryHandler(button))
-application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    # Start Flask app in a separate thread
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
+    # Run the bot in the main thread
+    run_bot()
