@@ -188,6 +188,16 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         await asyncio.sleep(30)
         os._exit(1)
 
+async def ping_self(context: ContextTypes.DEFAULT_TYPE):
+    url = os.getenv('RENDER_EXTERNAL_URL')
+    if url:
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(url) as response:
+                    logger.info(f"Self-ping status: {response.status}")
+            except Exception as e:
+                logger.error(f"Self-ping failed: {e}")
+
 async def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
@@ -199,16 +209,16 @@ async def main() -> None:
     # Add error handler
     application.add_error_handler(error_handler)
 
+    # Add job to ping self every 14 minutes
+    application.job_queue.run_repeating(ping_self, interval=840, first=10)
+
     # Start the bot
     await application.initialize()
     await application.start()
-    await application.updater.start_polling(drop_pending_updates=True)
 
-    # Run the bot until the user presses Ctrl-C
+    # Run the bot until the user presses Ctrl-C or the process receives SIGINT,
+    # SIGTERM or SIGABRT
     await application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped!")
+    asyncio.run(main())
