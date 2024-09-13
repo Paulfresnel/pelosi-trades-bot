@@ -8,6 +8,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.error import NetworkError, Conflict
+from functools import lru_cache
+from datetime import datetime, timedelta
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -21,6 +23,9 @@ TOKEN = os.getenv('TOKEN')
 
 # Create Flask app
 app = Flask(__name__)
+
+# Create a global variable for the application
+application = None
 
 # List of main representatives to track
 MAIN_REPRESENTATIVES = ['Pelosi', 'Green', 'Higgins', 'Graves']
@@ -205,17 +210,13 @@ def home():
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    asyncio.run(application.process_update(update))
+    if application:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        asyncio.run(application.process_update(update))
     return 'OK'
 
-async def setup_webhook():
-    webhook_url = f"{os.getenv('RENDER_EXTERNAL_URL')}/{TOKEN}"
-    await application.bot.set_webhook(webhook_url)
-    logger.info(f"Webhook set to {webhook_url}")
-
-if __name__ == '__main__':
-    # Set up the bot
+async def setup_webhook(app):
+    global application
     application = Application.builder().token(TOKEN).build()
 
     # Add handlers
@@ -229,9 +230,20 @@ if __name__ == '__main__':
     # Add job to ping self every 14 minutes
     application.job_queue.run_repeating(ping_self, interval=840, first=10)
 
-    # Set up webhook
-    asyncio.run(setup_webhook())
+    # Set webhook
+    webhook_url = f"{os.getenv('RENDER_EXTERNAL_URL')}/{TOKEN}"
+    await application.bot.set_webhook(webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
 
+    return application
+
+@app.before_first_request
+def before_first_request():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(setup_webhook(app))
+
+if __name__ == '__main__':
     # Run Flask app
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
