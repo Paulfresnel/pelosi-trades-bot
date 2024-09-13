@@ -10,6 +10,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.error import NetworkError, Conflict
+from aiohttp import web
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -198,7 +199,16 @@ async def ping_self(context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Self-ping failed: {e}")
 
-async def main() -> None:
+# Add this near the top of your file, after the other imports
+routes = web.RouteTableDef()
+
+@routes.get('/')
+async def hello(request):
+    return web.Response(text="Bot is running!")
+
+# Modify the main function to run both the bot and the web server
+async def main():
+    # Set up the bot
     application = Application.builder().token(TOKEN).build()
 
     # Add handlers
@@ -216,9 +226,21 @@ async def main() -> None:
     await application.initialize()
     await application.start()
 
+    # Set up the web server
+    app = web.Application()
+    app.add_routes(routes)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
+    await site.start()
+
     # Run the bot until the user presses Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    finally:
+        await runner.cleanup()
 
 if __name__ == '__main__':
     asyncio.run(main())
