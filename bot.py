@@ -2,15 +2,12 @@ import os
 import logging
 import asyncio
 import aiohttp
-import json
-from datetime import datetime, timedelta
-from functools import lru_cache
+from flask import Flask, request
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.error import NetworkError, Conflict
-from aiohttp import web
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -21,6 +18,9 @@ load_dotenv()
 
 # Get the token from environment variable
 TOKEN = os.getenv('TOKEN')
+
+# Create Flask app
+app = Flask(__name__)
 
 # List of main representatives to track
 MAIN_REPRESENTATIVES = ['Pelosi', 'Green', 'Higgins', 'Graves']
@@ -199,17 +199,22 @@ async def ping_self(context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.error(f"Self-ping failed: {e}")
 
-# Add this near the top of your file, after the other imports
-routes = web.RouteTableDef()
+@app.route('/')
+def home():
+    return "Bot is running!"
 
-@routes.get('/')
-async def hello(request):
-    return web.Response(text="Bot is running!")
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    asyncio.run(application.process_update(update))
+    return 'OK'
 
-async def start_webhook(application: Application, webhook_url: str):
+async def setup_webhook():
+    webhook_url = f"{os.getenv('RENDER_EXTERNAL_URL')}/{TOKEN}"
     await application.bot.set_webhook(webhook_url)
+    logger.info(f"Webhook set to {webhook_url}")
 
-async def main():
+if __name__ == '__main__':
     # Set up the bot
     application = Application.builder().token(TOKEN).build()
 
@@ -224,34 +229,9 @@ async def main():
     # Add job to ping self every 14 minutes
     application.job_queue.run_repeating(ping_self, interval=840, first=10)
 
-    # Set up the web server
-    app = web.Application()
-    app.add_routes(routes)
+    # Set up webhook
+    asyncio.run(setup_webhook())
 
-    # Start the web server
+    # Run Flask app
     port = int(os.environ.get('PORT', 8080))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    print(f"Web server started on port {port}")
-
-    # Set webhook
-    webhook_url = os.getenv('RENDER_EXTERNAL_URL')
-    if webhook_url:
-        await start_webhook(application, f"{webhook_url}/webhook")
-        print(f"Webhook set to {webhook_url}/webhook")
-
-    # Start the bot
-    await application.initialize()
-    await application.start()
-
-    # Run the bot until the user presses Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT
-    try:
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
-    finally:
-        await runner.cleanup()
-
-if __name__ == '__main__':
-    asyncio.run(main())
+    app.run(host='0.0.0.0', port=port)
