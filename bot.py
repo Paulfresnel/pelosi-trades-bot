@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import aiohttp
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -210,9 +210,18 @@ def home():
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
+    logger.info("Received webhook request")
     if application:
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        asyncio.run(application.process_update(update))
+        try:
+            update = Update.de_json(request.get_json(force=True), application.bot)
+            logger.info(f"Received update: {update}")
+            asyncio.run(application.process_update(update))
+        except Exception as e:
+            logger.error(f"Error processing update: {e}")
+            return jsonify({"error": str(e)}), 500
+    else:
+        logger.error("Application not initialized")
+        return jsonify({"error": "Application not initialized"}), 500
     return 'OK'
 
 async def setup_webhook():
@@ -232,16 +241,24 @@ async def setup_webhook():
 
     # Set webhook
     webhook_url = f"{os.getenv('RENDER_EXTERNAL_URL')}/{TOKEN}"
-    await application.bot.set_webhook(webhook_url)
-    logger.info(f"Webhook set to {webhook_url}")
+    try:
+        await application.bot.set_webhook(webhook_url)
+        logger.info(f"Webhook set to {webhook_url}")
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+        raise
 
     return application
 
 def create_app():
-    asyncio.run(setup_webhook())
+    try:
+        asyncio.run(setup_webhook())
+        logger.info("Application initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize application: {e}")
     return app
 
 if __name__ == '__main__':
     # Run Flask app
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 10000))
     create_app().run(host='0.0.0.0', port=port)
