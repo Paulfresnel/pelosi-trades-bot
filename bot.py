@@ -215,7 +215,7 @@ def webhook():
         asyncio.run(application.process_update(update))
     return 'OK'
 
-async def setup_webhook(app):
+async def setup_webhook():
     global application
     application = Application.builder().token(TOKEN).build()
 
@@ -237,13 +237,11 @@ async def setup_webhook(app):
 
     return application
 
-@app.before_first_request
-def before_first_request():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(setup_webhook(app))
+def create_app():
+    asyncio.run(setup_webhook())
+    return app
 
 if __name__ == '__main__':
     # Run Flask app
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    create_app().run(host='0.0.0.0', port=port)
