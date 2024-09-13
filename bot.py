@@ -206,7 +206,9 @@ routes = web.RouteTableDef()
 async def hello(request):
     return web.Response(text="Bot is running!")
 
-# Modify the main function to run both the bot and the web server
+async def start_webhook(application: Application, webhook_url: str):
+    await application.bot.set_webhook(webhook_url)
+
 async def main():
     # Set up the bot
     application = Application.builder().token(TOKEN).build()
@@ -222,18 +224,27 @@ async def main():
     # Add job to ping self every 14 minutes
     application.job_queue.run_repeating(ping_self, interval=840, first=10)
 
-    # Start the bot
-    await application.initialize()
-    await application.start()
-
     # Set up the web server
     app = web.Application()
     app.add_routes(routes)
 
+    # Start the web server
+    port = int(os.environ.get('PORT', 8080))
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 8080)))
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    print(f"Web server started on port {port}")
+
+    # Set webhook
+    webhook_url = os.getenv('RENDER_EXTERNAL_URL')
+    if webhook_url:
+        await start_webhook(application, f"{webhook_url}/webhook")
+        print(f"Webhook set to {webhook_url}/webhook")
+
+    # Start the bot
+    await application.initialize()
+    await application.start()
 
     # Run the bot until the user presses Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT
