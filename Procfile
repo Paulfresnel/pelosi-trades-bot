@@ -1,1 +1,1 @@
-web: gunicorn --worker-class gthread --threads 8 'bot:create_app()'
+web: gunicorn --worker-class gthread --threads 8 --preload 'bot:create_app()[0]'

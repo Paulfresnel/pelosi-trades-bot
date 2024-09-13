@@ -215,7 +215,8 @@ def webhook():
         try:
             update = Update.de_json(request.get_json(force=True), application.bot)
             logger.info(f"Received update: {update}")
-            asyncio.run(application.process_update(update))
+            application.run_polling(allowed_updates=[Update.MESSAGE, Update.CALLBACK_QUERY])
+            application.process_update(update)
         except Exception as e:
             logger.error(f"Error processing update: {e}")
             return jsonify({"error": str(e)}), 500
@@ -255,9 +256,10 @@ def create_app():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(setup_webhook())
     logger.info("Application initialized successfully")
-    return app
+    return app, application
 
 if __name__ == '__main__':
     # Run Flask app
     port = int(os.environ.get('PORT', 10000))
-    create_app().run(host='0.0.0.0', port=port)
+    app, _ = create_app()
+    app.run(host='0.0.0.0', port=port)
