@@ -208,7 +208,7 @@ async def ping_self(context: ContextTypes.DEFAULT_TYPE):
 def home():
     return "Bot is running!"
 
-@app.route(f'/{TOKEN}', methods=['POST'])
+@app.route(f'/webhook', methods=['POST'])
 def webhook():
     logger.info("Received webhook request")
     if application:
@@ -240,7 +240,7 @@ async def setup_webhook():
     application.job_queue.run_repeating(ping_self, interval=840, first=10)
 
     # Set webhook
-    webhook_url = f"{os.getenv('RENDER_EXTERNAL_URL')}/{TOKEN}"
+    webhook_url = f"{os.getenv('RENDER_EXTERNAL_URL')}/webhook"
     try:
         await application.bot.set_webhook(webhook_url)
         logger.info(f"Webhook set to {webhook_url}")
@@ -251,14 +251,12 @@ async def setup_webhook():
     return application
 
 def create_app():
-    try:
-        asyncio.run(setup_webhook())
-        logger.info("Application initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize application: {e}")
+    asyncio.run(setup_webhook())
+    logger.info("Application initialized successfully")
     return app
 
 if __name__ == '__main__':
     # Run Flask app
     port = int(os.environ.get('PORT', 10000))
-    create_app().run(host='0.0.0.0', port=port)
+    create_app()
+    app.run(host='0.0.0.0', port=port)
